@@ -1,0 +1,175 @@
+# Practical Machine Learning - WriteUp Submission
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+## Introduction 
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har
+
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+## Load required libraries
+
+The first step is to load the required libraries for this project:
+
+```{r loadlibraries}
+
+library(caret)
+library(parallel)
+library(doParallel)
+
+```
+
+## Load the data
+
+The second step is to load the data that will be used for this project.
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+```{r downloadandread}
+
+# set directory
+setwd("D:/Coursera/Machine Learning/")
+
+# verify if zip is in directory already, if now, downloads it
+if(!file.exists("pml-training.csv"))
+{
+        setInternet2(use = TRUE)
+        fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+        download.file(fileUrl, destfile = "pml-training.csv", mod = "wb")
+}
+
+# verify if variable trainData exists, if not, read file
+if(!exists("trainData"))
+{
+        trainData <- read.csv('pml-training.csv',na.strings=c("NA","#DIV/0!",""))
+}
+
+
+# repeat the same for testing data
+
+# verify if zip is in directory already, if now, downloads it
+if(!file.exists("pml-testing.csv"))
+{
+        setInternet2(use = TRUE)
+        fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+        download.file(fileUrl, destfile = "pml-testing.csv", mod = "wb")
+}
+
+# verify if variable trainData exists, if not, read file
+if(!exists("testData"))
+{
+        testData <- read.csv('pml-testing.csv',na.strings=c("NA","#DIV/0!",""))
+}
+
+```
+
+## Cleaning data
+
+A summary to the training data shows that the data is not properly ready for machine learning steps. In fact, some attributes have over 95% of observations with empty values (missing data) and as such they do not contribute properly to the training and classification. We need to remove those observations. This will be applied to both training and testing data.
+
+```{r removenascols}
+
+sumNas <- apply(trainData,2,function(x) {sum(is.na(x))});
+
+trainData <- trainData[,which(sumNas <  nrow(trainData)*0.95)];  
+testData <- testData[,which(sumNas <  nrow(trainData)*0.95)];
+
+```
+
+This reduced the number of features from 160 to 60 attributes (159/59 without classes).
+
+We can still clean the data if we factorize their names, drop cvtd timestamp column and factorize new_window attribute:
+
+```{r factorize}
+
+l = unique(c(as.character(trainData$user_name)))
+trainData$user_name <- as.numeric(factor(trainData$user_name, levels=l))
+testData$user_name <- as.numeric(factor(testData$user_name, levels=l))
+
+drops <- c("cvtd_timestamp")
+trainData <- trainData[,!(names(trainData) %in% drops)]
+testData <- testData[,!(names(testData) %in% drops)]
+
+
+l = unique(c(as.character(trainData$new_window)))
+trainData$new_window <- as.numeric(factor(trainData$new_window, levels=l))
+testData$new_window <- as.numeric(factor(testData$new_window, levels=l))
+
+```
+
+
+## Cross Validation
+
+For this project, we will be using Leave One Out Cross Validation to estimate the accuracy of our model.
+
+
+```{r train}
+
+# define training control
+train_control <- trainControl(method="LOOCV")
+
+# train the model
+model <- train(trainData[,1:ncol(trainData)-1] , method="rf" , trainData$classe , trControl = trainControl(method="cv", number=10))
+
+#predict and confusion matrix
+confusionMatrix(predict(model,trainData[,1:ncol(trainData)-1]),trainData$classe)
+
+model
+
+```
+
+
+As it is possible to see, using Random Forest, we were able to achieve Kappa statistic of 1 when evaluating using cross-validation K-fold order 10. In practice, we could say that this model is exceptionally good for this project. 
+
+
+## Testing data
+
+We can now try to estimate the classes of the 20 observations in the testing data. For that purpose we can drop the last column of the testData, as it represents the problem ID.
+
+
+```{r testdata}
+
+drops <- c("problem_id")
+testData <- testData[,!(names(testData) %in% drops)]
+
+
+prediction <- predict(model, testData)
+
+prediction
+
+```
+
+
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+  prediction <- predict(model, testData)
+
+
+predictionassignmet <- function(){
+  prediction <- predict(model, testData)
+  print(prediction)
+  answers <- as.vector(prediction)
+  pml_write_files(answers)
+    
+}
+
+```
+
